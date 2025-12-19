@@ -1,1 +1,25 @@
-.DS_Store
+# IDE files
+.idea/
+.gradle/
+*.iml
+*.DS_Store
+
+# Local configuration
+local.properties
+
+# Build outputs
+/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Keystore files (sensitive)
+*.jks
+*.keystore
+
+# Other generated files
+captures/
+.externalNativeBuild/
+*.nav_inspector_temp
