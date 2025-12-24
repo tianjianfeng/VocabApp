@@ -41,16 +41,16 @@ class CardDeckViewModel(
     
     private fun loadData() {
         viewModelScope.launch {
-            // Load last card index
-            val lastIndex = userPreferences.lastCardIndex.first()
+            // Get card index for THIS specific list
+            val lastIndex = userPreferences.getCardIndexForList(listId)
             
-            combine(
-                repository.getListWithWords(listId),
-                flowOf(lastIndex)
-            ) { listWithWords, savedIndex ->
+            // Mark this list as last visited
+            userPreferences.saveLastVisitedListId(listId)
+            
+            repository.getListWithWords(listId).collect { listWithWords ->
                 if (listWithWords != null) {
-                    val validIndex = savedIndex.coerceIn(0, maxOf(0, listWithWords.words.size - 1))
-                    CardDeckUiState(
+                    val validIndex = lastIndex.coerceIn(0, maxOf(0, listWithWords.words.size - 1))
+                    _uiState.value = CardDeckUiState(
                         vocabList = listWithWords.vocabList,
                         words = listWithWords.words,
                         currentCardIndex = validIndex,
@@ -58,16 +58,9 @@ class CardDeckViewModel(
                         isLoading = false
                     )
                 } else {
-                    CardDeckUiState(isLoading = false)
+                    _uiState.value = CardDeckUiState(isLoading = false)
                 }
-            }.collect { state ->
-                _uiState.value = state
             }
-        }
-        
-        // Save last visited list
-        viewModelScope.launch {
-            userPreferences.saveLastVisitedList(listId)
         }
     }
     
@@ -109,8 +102,8 @@ class CardDeckViewModel(
     
     private fun saveCardIndex(index: Int) {
         viewModelScope.launch {
-            userPreferences.saveLastCardIndex(index)
+            // Save card index for THIS specific list
+            userPreferences.saveCardIndexForList(listId, index)
         }
     }
 }
-

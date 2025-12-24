@@ -72,7 +72,7 @@ class VocabListViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setLastVisitedList(listId: Long) {
         viewModelScope.launch {
-            userPreferences.saveLastVisitedList(listId)
+            userPreferences.saveLastVisitedListId(listId)
         }
     }
 }
