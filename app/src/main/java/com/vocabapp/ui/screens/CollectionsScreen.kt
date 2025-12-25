@@ -1,7 +1,6 @@
 package com.vocabapp.ui.screens
 
 import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,7 +10,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,24 +21,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.vocabapp.data.entities.VocabList
+import com.vocabapp.data.entities.Collection
+import com.vocabapp.data.entities.CollectionWithLists
 import com.vocabapp.ui.theme.*
-import com.vocabapp.ui.viewmodel.VocabListUiState
+import com.vocabapp.ui.viewmodel.CollectionListUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VocabListScreen(
-    uiState: VocabListUiState,
-    onListClick: (Long) -> Unit,
-    onAddList: (String, String) -> Unit,
-    onDeleteList: (VocabList) -> Unit,
-    onCollectionsClick: () -> Unit,
+fun CollectionsScreen(
+    uiState: CollectionListUiState,
+    onCollectionClick: (Long) -> Unit,
+    onCreateCollection: (String, String) -> Unit,
+    onDeleteCollection: (Collection) -> Unit,
+    onBackClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by remember { mutableStateOf(false) }
     
     val gradientColors = listOf(
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.1f),
         MaterialTheme.colorScheme.background
     )
     
@@ -53,25 +52,21 @@ fun VocabListScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.MenuBook,
+                            imageVector = Icons.Outlined.FolderOpen,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.size(36.dp)
                         )
                         Text(
-                            text = "My Vocabulary",
+                            text = "My Collections",
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 },
-                actions = {
-                    IconButton(onClick = onCollectionsClick) {
-                        Icon(
-                            imageVector = Icons.Outlined.FolderOpen,
-                            contentDescription = "Collections",
-                            tint = MaterialTheme.colorScheme.tertiary
-                        )
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 },
                 colors = TopAppBarDefaults.largeTopAppBarColors(
@@ -81,13 +76,13 @@ fun VocabListScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                onClick = { showCreateDialog = true },
+                containerColor = MaterialTheme.colorScheme.tertiary,
+                contentColor = MaterialTheme.colorScheme.onTertiary
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add List")
+                Icon(Icons.Default.CreateNewFolder, contentDescription = "Create Collection")
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("New List")
+                Text("New Collection")
             }
         }
     ) { paddingValues ->
@@ -102,45 +97,23 @@ fun VocabListScreen(
             if (uiState.isLoading) {
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.tertiary
                 )
-            } else if (uiState.lists.isEmpty()) {
-                EmptyState(
+            } else if (uiState.collections.isEmpty()) {
+                EmptyCollectionState(
                     modifier = Modifier.align(Alignment.Center),
-                    onAddClick = { showAddDialog = true }
+                    onCreateClick = { showCreateDialog = true }
                 )
             } else {
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Show last visited indicator
-                    uiState.lastVisitedListId?.let { lastId ->
-                        uiState.lists.find { it.id == lastId }?.let { lastList ->
-                            item {
-                                LastVisitedCard(
-                                    vocabList = lastList,
-                                    wordCount = uiState.wordCounts[lastList.id] ?: 0,
-                                    onClick = { onListClick(lastList.id) }
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "All Lists",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 4.dp, top = 8.dp)
-                                )
-                            }
-                        }
-                    }
-                    
-                    items(uiState.lists, key = { it.id }) { vocabList ->
-                        VocabListCard(
-                            vocabList = vocabList,
-                            wordCount = uiState.wordCounts[vocabList.id] ?: 0,
-                            isLastVisited = vocabList.id == uiState.lastVisitedListId,
-                            onClick = { onListClick(vocabList.id) },
-                            onDelete = { onDeleteList(vocabList) }
+                    items(uiState.collections, key = { it.collection.id }) { collectionWithLists ->
+                        CollectionCard(
+                            collectionWithLists = collectionWithLists,
+                            onClick = { onCollectionClick(collectionWithLists.collection.id) },
+                            onDelete = { onDeleteCollection(collectionWithLists.collection) }
                         )
                     }
                 }
@@ -148,95 +121,33 @@ fun VocabListScreen(
         }
     }
     
-    if (showAddDialog) {
-        AddListDialog(
-            onDismiss = { showAddDialog = false },
+    if (showCreateDialog) {
+        CreateCollectionDialog(
+            onDismiss = { showCreateDialog = false },
             onConfirm = { name, description ->
-                onAddList(name, description)
-                showAddDialog = false
+                onCreateCollection(name, description)
+                showCreateDialog = false
             }
         )
     }
 }
 
 @Composable
-private fun LastVisitedCard(
-    vocabList: VocabList,
-    wordCount: Int,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .shadow(8.dp, RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primary
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.History,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
-                    modifier = Modifier.size(20.dp)
-                )
-                Text(
-                    text = "Continue Learning",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = vocabList.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-            Text(
-                text = "$wordCount words",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun VocabListCard(
-    vocabList: VocabList,
-    wordCount: Int,
-    isLastVisited: Boolean,
+private fun CollectionCard(
+    collectionWithLists: CollectionWithLists,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
-    
-    val cardColors = listOf(
-        AccentCoral to Color.White,
-        AccentMint to Color.White,
-        AccentLavender to Color.White,
-        AccentSky to Color.Black
-    )
-    val (accentColor, textColor) = remember(vocabList.id) {
-        cardColors[(vocabList.id % cardColors.size).toInt()]
-    }
+    val collection = collectionWithLists.collection
+    val listCount = collectionWithLists.lists.size
     
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .shadow(4.dp, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
+            .shadow(4.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -245,33 +156,40 @@ private fun VocabListCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(4.dp),
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Color accent bar
+            // Folder icon
             Box(
                 modifier = Modifier
-                    .width(6.dp)
-                    .height(80.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(accentColor)
-            )
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(AccentLavender.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Folder,
+                    contentDescription = null,
+                    tint = AccentLavender,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(16.dp))
             
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                modifier = Modifier.weight(1f)
             ) {
                 Text(
-                    text = vocabList.name,
+                    text = collection.name,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (vocabList.description.isNotEmpty()) {
+                if (collection.description.isNotEmpty()) {
                     Text(
-                        text = vocabList.description,
+                        text = collection.description,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -284,13 +202,13 @@ private fun VocabListCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Style,
+                        imageVector = Icons.Default.List,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = "$wordCount cards",
+                        text = "$listCount ${if (listCount == 1) "list" else "lists"}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -310,8 +228,8 @@ private fun VocabListCard(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete List") },
-            text = { Text("Are you sure you want to delete \"${vocabList.name}\"? This action cannot be undone.") },
+            title = { Text("Delete Collection") },
+            text = { Text("Are you sure you want to delete \"${collection.name}\"? The vocabulary lists will not be deleted.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -335,8 +253,8 @@ private fun VocabListCard(
 }
 
 @Composable
-private fun EmptyState(
-    onAddClick: () -> Unit,
+private fun EmptyCollectionState(
+    onCreateClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -345,34 +263,34 @@ private fun EmptyState(
         verticalArrangement = Arrangement.Center
     ) {
         Icon(
-            imageVector = Icons.Outlined.MenuBook,
+            imageVector = Icons.Outlined.FolderOpen,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier.size(80.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "No vocabulary lists yet",
+            text = "No collections yet",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Create your first list to start learning",
+            text = "Create collections to organize your vocabulary lists",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onAddClick) {
-            Icon(Icons.Default.Add, contentDescription = null)
+        Button(onClick = onCreateClick) {
+            Icon(Icons.Default.CreateNewFolder, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Create List")
+            Text("Create Collection")
         }
     }
 }
 
 @Composable
-private fun AddListDialog(
+private fun CreateCollectionDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, String) -> Unit
 ) {
@@ -381,7 +299,7 @@ private fun AddListDialog(
     
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create New List") },
+        title = { Text("Create New Collection") },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -389,8 +307,8 @@ private fun AddListDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("List Name") },
-                    placeholder = { Text("e.g., TOEFL Vocabulary") },
+                    label = { Text("Collection Name") },
+                    placeholder = { Text("e.g., Exam Preparation") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -398,7 +316,7 @@ private fun AddListDialog(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text("Description (optional)") },
-                    placeholder = { Text("e.g., Essential words for TOEFL exam") },
+                    placeholder = { Text("e.g., All my exam vocab lists") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )

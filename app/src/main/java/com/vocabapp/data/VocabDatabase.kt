@@ -5,19 +5,30 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.vocabapp.data.dao.CollectionDao
 import com.vocabapp.data.dao.MeaningDao
 import com.vocabapp.data.dao.VocabListDao
 import com.vocabapp.data.dao.WordDao
+import com.vocabapp.data.entities.Collection
+import com.vocabapp.data.entities.CollectionListCrossRef
 import com.vocabapp.data.entities.Meaning
 import com.vocabapp.data.entities.VocabList
 import com.vocabapp.data.entities.Word
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Database(
-    entities = [VocabList::class, Word::class, Meaning::class],
-    version = 1,
+    entities = [
+        VocabList::class,
+        Word::class,
+        Meaning::class,
+        Collection::class,
+        CollectionListCrossRef::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class VocabDatabase : RoomDatabase() {
@@ -25,6 +36,7 @@ abstract class VocabDatabase : RoomDatabase() {
     abstract fun vocabListDao(): VocabListDao
     abstract fun wordDao(): WordDao
     abstract fun meaningDao(): MeaningDao
+    abstract fun collectionDao(): CollectionDao
     
     companion object {
         @Volatile
@@ -37,21 +49,23 @@ abstract class VocabDatabase : RoomDatabase() {
                     VocabDatabase::class.java,
                     "vocab_database"
                 )
-                    .addCallback(DatabaseCallback())
+                    .fallbackToDestructiveMigration()
+                    .addCallback(object : Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            // Use a delayed approach to ensure INSTANCE is set
+                            CoroutineScope(Dispatchers.IO).launch {
+                                // Small delay to ensure INSTANCE is set
+                                delay(100)
+                                INSTANCE?.let { database ->
+                                    populateSampleData(database)
+                                }
+                            }
+                        }
+                    })
                     .build()
                 INSTANCE = instance
                 instance
-            }
-        }
-    }
-    
-    private class DatabaseCallback : Callback() {
-        override fun onCreate(db: SupportSQLiteDatabase) {
-            super.onCreate(db)
-            INSTANCE?.let { database ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    populateSampleData(database)
-                }
             }
         }
         
@@ -59,6 +73,11 @@ abstract class VocabDatabase : RoomDatabase() {
             val vocabListDao = database.vocabListDao()
             val wordDao = database.wordDao()
             val meaningDao = database.meaningDao()
+            val collectionDao = database.collectionDao()
+            
+            // Check if data already exists
+            val existingLists = vocabListDao.getAllLists().first()
+            if (existingLists.isNotEmpty()) return
             
             // Create TOEFL vocabulary list
             val toeflId = vocabListDao.insertList(
@@ -159,7 +178,13 @@ abstract class VocabDatabase : RoomDatabase() {
                     meaningDao.insertMeaning(Meaning(wordId = wordId, partOfSpeech = pos, definition = def))
                 }
             }
+            
+            // Create a sample collection with some lists
+            val examPrepId = collectionDao.insertCollection(
+                Collection(name = "Exam Preparation", description = "All my exam vocabulary lists")
+            )
+            collectionDao.addListToCollection(CollectionListCrossRef(examPrepId, toeflId))
+            collectionDao.addListToCollection(CollectionListCrossRef(examPrepId, greId))
         }
     }
 }
-
